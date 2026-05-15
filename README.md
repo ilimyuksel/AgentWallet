@@ -1,36 +1,123 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AgentFlow — AI Agent Orchestration & Wallet Platform
 
-## Getting Started
+AgentFlow, yapay zeka ajanları arasındaki finansal altyapıdır. Orchestrator Engine her ajanı doğal dil ile tetikler; wallet sistemi ödemeleri otomatik olarak on-chain'e yazar.
 
-First, run the development server:
+> **MVP Demo** — Tüm veriler simüle edilmiştir. Gerçek API entegrasyonu içermez.
+
+---
+
+## Ekran Görüntüleri
+
+### Landing Page
+![Landing Page](public/screenshots/landing.png)
+
+### Dashboard
+![Dashboard](public/screenshots/dashboard.png)
+
+### Agent Marketplace
+![Marketplace](public/screenshots/marketplace.png)
+
+### Pipeline Oluşturucu
+![Pipeline](public/screenshots/pipeline.png)
+
+### Agent Wallet
+![Wallet](public/screenshots/wallet.png)
+
+### Ayarlar
+![Settings](public/screenshots/settings.png)
+
+---
+
+## Özellikler
+
+- **Orchestrator Engine** — Doğal dil prompt'ından intent çıkarır, marketplace'den en uygun ajanları seçer ve pipeline'ı kurar
+- **Agent Wallet** — Her ajanın kendi on-chain cüzdanı; bakiyeler ve transferler gerçek zamanlı izlenir
+- **Otomatik Settlement** — Orchestrator bir adımı onayladığında ödeme milisaniyeler içinde bir sonraki ajana aktarılır
+- **Pipeline Görselleştirme** — React Flow canvas ile canlı ajan akışı
+- **Blockchain Şeffaflığı** — Tx hash, blok numarası, gas maliyeti — değiştirilemez kayıt
+- **AGT Token** — Mikro ödeme optimizasyonu için native token desteği
+
+---
+
+## Teknik Yığın
+
+| Katman | Teknoloji |
+|---|---|
+| Framework | Next.js 14 (App Router) |
+| Dil | TypeScript |
+| Stil | Tailwind CSS |
+| Bileşenler | shadcn/ui |
+| State | Zustand (localStorage persist) |
+| Pipeline Canvas | React Flow |
+| İkonlar | Lucide React |
+| Fontlar | Geist Sans + Playfair Display |
+
+---
+
+## Kurulum
 
 ```bash
+git clone https://github.com/ilimyuksel/AgentWallet.git
+cd AgentWallet
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Tarayıcıda `http://localhost:3000` adresini aç.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Proje Yapısı
 
-## Learn More
+```
+agentflow/
+├── app/
+│   ├── page.tsx                  # Landing page
+│   └── (app)/
+│       ├── dashboard/page.tsx    # Dashboard
+│       ├── marketplace/page.tsx  # Agent Marketplace
+│       ├── pipeline/page.tsx     # Pipeline oluşturucu
+│       ├── wallet/page.tsx       # Agent Wallet
+│       └── settings/page.tsx     # Ayarlar
+├── components/
+│   ├── layout/Sidebar.tsx
+│   ├── agents/AgentCard.tsx
+│   ├── pipeline/PipelineCanvas.tsx
+│   └── wallet/WalletCard.tsx
+├── lib/
+│   ├── store.ts                  # Zustand store
+│   ├── orchestrator.ts           # Pipeline simülatörü
+│   └── utils.ts
+├── data/
+│   └── mock.ts                   # Mock ajan ve transaction verisi
+└── types/
+    └── index.ts                  # TypeScript tipleri
+```
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Sayfa Açıklamaları
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Landing (`/`)
+OpenServ tarzında editorial tasarım. Serif display başlıklar, dashed bölüm ayırıcılar ve organic blob görsellerle AgentFlow'un değer önerisini anlatır.
 
-## Deploy on Vercel
+### Dashboard (`/dashboard`)
+Aktif pipeline sayısı, bağlı ajan sayısı, toplam bakiye ve işlem sayısını gösteren stat kartları. Hızlı prompt girişi ile doğrudan Pipeline sayfasına yönlendirir.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Marketplace (`/marketplace`)
+8 mock ajan; kategori filtresi ve arama ile listelenir. Her ajan kartında gradient ikon, fiyat, bakiye ve bağlantı durumu gösterilir.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Pipeline (`/pipeline`)
+Doğal dil promptu → orchestrator keyword matching → ajan seçimi → React Flow canvas animasyonu → on-chain transfer logu.
+
+### Wallet (`/wallet`)
+Tüm ajan cüzdanları, bakiye progress barları, düşük bakiye uyarısı. Fon ekleme modal'ı ve full transfer geçmişi tablosu.
+
+### Ayarlar (`/settings`)
+Profil bilgileri, bildirim toggle'ları ve plan bilgisi.
+
+---
+
+## Lisans
+
+MIT
