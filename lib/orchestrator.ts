@@ -57,7 +57,7 @@ export async function simulatePipeline(
     onLog({
       timestamp: new Date().toISOString(),
       type: "success",
-      message: `${agent.icon} ${agent.name} pipeline'a eklendi`,
+      message: `[+] ${agent.name} pipeline'a eklendi`,
     });
     await delay(400);
   }
@@ -68,7 +68,7 @@ export async function simulatePipeline(
   onLog({ timestamp: new Date().toISOString(), type: "success", message: "Pipeline aktif. Tetikleyici koşul izleniyor..." });
   await delay(1200);
 
-  onLog({ timestamp: new Date().toISOString(), type: "info", message: "⚡ Tetikleyici koşul karşılandı! Transfer başlatılıyor..." });
+  onLog({ timestamp: new Date().toISOString(), type: "info", message: "Tetikleyici koşul karşılandı. Transfer başlatılıyor..." });
   await delay(700);
 
   for (let i = 0; i < agents.length - 1; i++) {
@@ -93,15 +93,15 @@ export async function simulatePipeline(
     onLog({
       timestamp: new Date().toISOString(),
       type: "transfer",
-      message: `💸 ${from.icon} → ${to.icon}  $${amount.toFixed(2)} transfer · ${tx.txHash.slice(0, 14)}...`,
+      message: `[TX] ${from.name} → ${to.name}  $${amount.toFixed(2)} · ${tx.txHash.slice(0, 14)}...`,
     });
     await delay(900);
   }
 
   const lastAgent = agents[agents.length - 1];
-  onLog({ timestamp: new Date().toISOString(), type: "success", message: `✅ ${lastAgent.icon} ${lastAgent.name} görevi tamamladı` });
+  onLog({ timestamp: new Date().toISOString(), type: "success", message: `${lastAgent.name} görevi tamamladı` });
   await delay(500);
-  onLog({ timestamp: new Date().toISOString(), type: "success", message: "🎉 Pipeline başarıyla tamamlandı!" });
+  onLog({ timestamp: new Date().toISOString(), type: "success", message: "Pipeline başarıyla tamamlandı." });
 
   return {
     id: pipelineId,

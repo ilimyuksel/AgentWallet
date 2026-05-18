@@ -3,7 +3,17 @@
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { AgentCategory } from "@/types";
-import { Search, Check } from "lucide-react";
+import { Search, Check, TrendingUp, Coffee, MessageCircle, Navigation, Cloud, Cpu } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  finance:       TrendingUp,
+  food:          Coffee,
+  communication: MessageCircle,
+  transport:     Navigation,
+  weather:       Cloud,
+  productivity:  Cpu,
+};
 
 const categories: { value: AgentCategory | "all"; label: string }[] = [
   { value: "all",           label: "Tümü" },
@@ -42,7 +52,7 @@ export default function MarketplacePage() {
   });
 
   return (
-    <div className="p-8 max-w-5xl space-y-7">
+    <div className="p-8 max-w-5xl mx-auto space-y-7">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-black">Agent Marketplace</h1>
@@ -86,7 +96,8 @@ export default function MarketplacePage() {
           <p className="text-sm mt-1">Arama kriterlerinizi değiştirin</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="relative">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((agent) => {
             const wallet    = wallets.find((w) => w.agentId === agent.id);
             const gradient  = categoryGradients[agent.category] ?? "linear-gradient(135deg,#e0e0e0,#c0c0c0)";
@@ -99,9 +110,9 @@ export default function MarketplacePage() {
               <div key={agent.id} className="bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-sm transition-all">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl flex-shrink-0"
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
                       style={{ background: gradient }}>
-                      {agent.icon}
+                      {(() => { const Icon = CATEGORY_ICONS[agent.category] ?? Cpu; return <Icon className="w-5 h-5 text-white opacity-90" />; })()}
                     </div>
                     <div>
                       <p className="font-bold text-black text-sm leading-tight">{agent.name}</p>
@@ -153,6 +164,15 @@ export default function MarketplacePage() {
               </div>
             );
           })}
+          </div>
+          {filtered.length >= 6 && (
+            <div style={{
+              position: "absolute", bottom: 0, left: 0, right: 0,
+              height: 160,
+              background: "linear-gradient(to bottom, transparent, white)",
+              pointerEvents: "none",
+            }} />
+          )}
         </div>
       )}
     </div>

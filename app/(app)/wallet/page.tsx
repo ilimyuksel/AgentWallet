@@ -2,7 +2,17 @@
 
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Coins, TrendingUp, Activity } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Coins, TrendingUp, Activity, Coffee, MessageCircle, Navigation, Cloud, Cpu } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  finance:       TrendingUp,
+  food:          Coffee,
+  communication: MessageCircle,
+  transport:     Navigation,
+  weather:       Cloud,
+  productivity:  Cpu,
+};
 
 const typeLabels: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
   user_to_agent:     { label: "Kullanıcı → Ajan", icon: <ArrowDownRight className="w-3 h-3" />, color: "text-green-500" },
@@ -47,7 +57,7 @@ export default function WalletPage() {
   };
 
   return (
-    <div className="p-8 max-w-5xl space-y-8">
+    <div className="p-8 max-w-5xl mx-auto space-y-8">
 
       {/* Header */}
       <div>
@@ -83,9 +93,9 @@ export default function WalletPage() {
               <div key={agent.id} className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
                       style={{ background: grad }}>
-                      {agent.icon}
+                      {(() => { const Icon = CATEGORY_ICONS[agent.category] ?? Cpu; return <Icon className="w-4 h-4 text-white opacity-90" />; })()}
                     </div>
                     <div>
                       <p className="text-sm font-bold text-black leading-tight">{agent.name}</p>
