@@ -1,71 +1,162 @@
-export type AgentCategory =
-  | "finance"
-  | "food"
-  | "communication"
-  | "transport"
-  | "weather"
-  | "productivity";
+export type AgentTier = "T1" | "T2" | "JUDGE";
+
+export type BiddingStyle = "aggressive" | "analytical" | "premium" | "volume" | "underdog" | "none";
 
 export type AgentStatus = "active" | "idle" | "error" | "running";
 
 export interface Agent {
   id: string;
-  name: string;
-  description: string;
-  category: AgentCategory;
-  pricePerCall: number;
-  capabilities: string[];
-  isConnected: boolean;
-  status: AgentStatus;
-  icon: string;
-  walletAddress: string;
+  displayName: string;
+  tier: AgentTier;
+  role: string;
+  skillKeywords: string;
+  basePrice: number | null;
+  minAcceptance: number;
+  biddingStyle: BiddingStyle;
+  reputation: number;
+  successRate: number;
+  completedJobs: number;
+  walletId: string;
+  canHireSubagents: boolean;
+  isGhost: boolean;
+  isActive: boolean;
 }
 
-export interface AgentWallet {
+export type WalletOwnerType = "USER" | "ESCROW" | "AGENT" | "SYSTEM";
+
+export interface Wallet {
   id: string;
-  agentId: string;
-  userId: string;
+  ownerType: WalletOwnerType;
+  ownerId: string | null;
   balance: number;
-  agtBalance: number;
-  currency: "USD";
+  currency: string;
 }
 
-export type PipelineStatus = "active" | "paused" | "completed" | "error";
+export type JobState =
+  | "CREATED"
+  | "MANAGER_BIDDING"
+  | "PLANNING"
+  | "EXECUTING"
+  | "COMPLETED"
+  | "REJECTED"
+  | "FAILED"
+  | "CANCELLED";
 
-export interface PipelineAgent {
-  agentId: string;
-  order: number;
-  status: AgentStatus;
-}
+export type TaskState =
+  | "PENDING"
+  | "READY"
+  | "BIDDING"
+  | "ASSIGNED"
+  | "RUNNING"
+  | "DONE"
+  | "VERIFYING"
+  | "VERIFIED"
+  | "PAID"
+  | "REVISION"
+  | "REJECTED"
+  | "FAILED";
 
-export interface Pipeline {
+export type BudgetTier = "REJECTED" | "MINIMAL" | "STANDARD" | "PREMIUM";
+
+export interface Job {
   id: string;
   userId: string;
-  prompt: string;
-  agents: PipelineAgent[];
-  status: PipelineStatus;
-  triggerCondition: string;
+  userPrompt: string;
+  budget: number;
+  budgetTier: BudgetTier | null;
+  escrowWalletId: string | null;
+  assignedManagerId: string | null;
+  managerBidAmount: number | null;
+  managerProfitMargin: number | null;
+  state: JobState;
+  finalOutputId: string | null;
   createdAt: string;
-  lastRunAt?: string;
-  totalCost: number;
-  runCount: number;
+  completedAt: string | null;
+  failureReason: string | null;
 }
 
-export type TransactionType = "user_to_agent" | "agent_to_agent" | "agent_to_external";
+export interface Task {
+  id: string;
+  jobId: string;
+  title: string;
+  description: string;
+  requiredSkills: string[];
+  budget: number;
+  finalCost: number | null;
+  state: TaskState;
+  dependencies: string[];
+  assignedAgentId: string | null;
+  judgeScore: number | null;
+  judgeVerdict: string | null;
+  judgeFeedback: string | null;
+  revisionCount: number;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface Bid {
+  id: string;
+  taskId: string;
+  agentId: string;
+  bidAmount: number;
+  reasoning: string | null;
+  confidence: number | null;
+  estimatedTimeSeconds: number | null;
+  scopeAssumption: string | null;
+  isWinner: boolean;
+  selectionScore: number | null;
+  submittedAt: string;
+}
+
+export interface JudgeEvaluation {
+  id: string;
+  taskId: string;
+  evaluatedAgentId: string;
+  scopeCompleteness: number | null;
+  structuralQuality: number | null;
+  contentQuality: number | null;
+  briefFidelity: number | null;
+  finalScore: number;
+  decision: "APPROVED" | "REVISION_REQUESTED" | "REJECTED";
+  reasoning: string | null;
+  feedbackForRevision: string | null;
+  confidenceInJudgment: number | null;
+  createdAt: string;
+}
+
+export type TransactionType =
+  | "ESCROW_LOCK"
+  | "MANAGER_FUNDING"
+  | "MILESTONE_RELEASE"
+  | "JUDGE_FEE"
+  | "PM_PROFIT"
+  | "AGENT_PAYMENT"
+  | "REFUND"
+  | "GENESIS";
 
 export interface Transaction {
   id: string;
-  fromAgentId: string | "user";
-  toAgentId: string;
+  jobId: string | null;
+  taskId: string | null;
+  fromWalletId: string;
+  toWalletId: string;
   amount: number;
-  agtAmount: number;
-  type: TransactionType;
-  pipelineId: string;
-  createdAt: string;
-  txHash: string;
+  transactionType: TransactionType;
+  milestone: "START" | "MID" | "COMPLETION" | null;
+  description: string | null;
   blockNumber: number;
-  gasUsed: number;
-  status: "confirmed" | "pending";
+  blockHash: string;
+  previousBlockHash: string;
+  createdAt: string;
+}
+
+export interface WSEvent {
+  eventType: string;
+  timestamp: string;
+  jobId: string | null;
+  taskId: string | null;
+  payload: Record<string, unknown>;
 }
 
 export interface PipelineLog {
@@ -74,12 +165,12 @@ export interface PipelineLog {
   type: "info" | "success" | "error" | "transfer";
 }
 
-export interface PipelineRun {
-  id: string;
-  pipelineId: string;
-  status: "running" | "completed" | "failed";
-  startedAt: string;
-  completedAt?: string;
-  logs: PipelineLog[];
-  transactions: Transaction[];
+export interface SystemStats {
+  totalJobs: number;
+  completedJobs: number;
+  activeJobs: number;
+  totalAgents: number;
+  activeAgents: number;
+  totalLedgerVolume: number;
+  totalBlocks: number;
 }

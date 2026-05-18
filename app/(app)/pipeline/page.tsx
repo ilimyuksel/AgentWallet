@@ -1,550 +1,402 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
 import { useAppStore } from "@/lib/store";
-import { simulatePipeline } from "@/lib/orchestrator";
-import { mockAgents } from "@/data/mock";
-import { PipelineLog, Agent } from "@/types";
+import { Job, Task, Agent, WSEvent, BudgetTier } from "@/types";
 import {
-  Zap, RotateCcw, ArrowRight,
-  TrendingUp, Coffee, MessageCircle, Navigation, Cloud, Cpu,
+  Send, Zap, CheckCircle, Clock, AlertCircle, Loader2,
+  ChevronRight, DollarSign, Activity, Hash, ArrowRight,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 
-const CATEGORY_STYLE: Record<string, { bg: string; color: string; Icon: LucideIcon }> = {
-  finance:       { bg: "#fef3c7", color: "#b45309", Icon: TrendingUp   },
-  food:          { bg: "#d1fae5", color: "#065f46", Icon: Coffee        },
-  communication: { bg: "#ede9fe", color: "#5b21b6", Icon: MessageCircle },
-  transport:     { bg: "#dbeafe", color: "#1e40af", Icon: Navigation    },
-  weather:       { bg: "#ccfbf1", color: "#0f766e", Icon: Cloud         },
-  productivity:  { bg: "#fce7f3", color: "#9d174d", Icon: Cpu           },
-};
-
-const LOG_COLORS: Record<PipelineLog["type"], string> = {
-  info:     "#6b7280",
-  success:  "#4ade80",
-  error:    "#f87171",
-  transfer: "#a78bfa",
-};
-
-const EXAMPLES = [
-  "Borsadan $100 kar ettiğimde kahve siparişi ver",
-  "Yağmur yağacaksa taksi rezervasyonu yap ve Slack'e bildir",
-  "Her sabah e-postalarımı özetle ve Slack kanalına gönder",
-  "Bitcoin %5 düşünce bana haber ver",
+const JOB_STATES: { key: Job["state"]; label: string }[] = [
+  { key: "CREATED",         label: "Created" },
+  { key: "MANAGER_BIDDING", label: "Manager Bidding" },
+  { key: "PLANNING",        label: "Planning" },
+  { key: "EXECUTING",       label: "Executing" },
+  { key: "COMPLETED",       label: "Completed" },
 ];
 
-/* ─── Connector ─────────────────────────────────────────────────── */
-type ConnectorState = "idle" | "active" | "done";
+const JOB_STATE_ORDER = ["CREATED", "MANAGER_BIDDING", "PLANNING", "EXECUTING", "COMPLETED"];
 
-function Connector({ state, amount }: { state: ConnectorState; amount?: string }) {
-  const color =
-    state === "done"   ? "#00e96e" :
-    state === "active" ? "#6b7fff" : "#e5e7eb";
+const TASK_STATE_COLOR: Record<Task["state"], string> = {
+  PENDING:   "#334155",
+  READY:     "#64748b",
+  BIDDING:   "#f59e0b",
+  ASSIGNED:  "#3B82F6",
+  RUNNING:   "#8B5CF6",
+  DONE:      "#64748b",
+  VERIFYING: "#f59e0b",
+  VERIFIED:  "#3B82F6",
+  PAID:      "#10B981",
+  REVISION:  "#f97316",
+  REJECTED:  "#ef4444",
+  FAILED:    "#ef4444",
+};
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flexShrink: 0, width: 64, marginTop: -8 }}>
-      {/* Amount badge */}
-      <div style={{
-        height: 18,
-        display: "flex", alignItems: "center",
-      }}>
-        {state === "active" && amount && (
-          <span style={{
-            fontSize: 9, fontWeight: 700, color: "#6b7fff",
-            background: "#ede9fe", padding: "2px 7px", borderRadius: 10,
-            letterSpacing: "0.04em",
-          }}>
-            {amount}
-          </span>
-        )}
-        {state === "done" && (
-          <span style={{
-            fontSize: 9, fontWeight: 700, color: "#00a854",
-            background: "#e8fdf0", padding: "2px 7px", borderRadius: 10,
-          }}>
-            ✓
-          </span>
-        )}
-      </div>
+const TASK_STATE_LABEL: Record<Task["state"], string> = {
+  PENDING:   "Pending",
+  READY:     "Ready",
+  BIDDING:   "Bidding",
+  ASSIGNED:  "Assigned",
+  RUNNING:   "Running",
+  DONE:      "Done",
+  VERIFYING: "Verifying",
+  VERIFIED:  "Verified",
+  PAID:      "Paid",
+  REVISION:  "Revision",
+  REJECTED:  "Rejected",
+  FAILED:    "Failed",
+};
 
-      {/* Line */}
-      <div style={{ position: "relative", width: "100%", height: 2, overflow: "visible", display: "flex", alignItems: "center" }}>
-        <div style={{
-          position: "absolute", left: 0, right: 0, height: 2,
-          background: color,
-          borderRadius: 2,
-          transition: "background 0.4s",
-        }} />
-
-        {/* Moving particle */}
-        {state === "active" && (
-          <div style={{
-            position: "absolute",
-            width: 8, height: 8, borderRadius: "50%",
-            background: "#6b7fff",
-            top: "50%", transform: "translateY(-50%)",
-            boxShadow: "0 0 8px #6b7fff80",
-            animation: "slideParticle 1.2s linear infinite",
-          }} />
-        )}
-
-        {/* Arrow head */}
-        <div style={{
-          position: "absolute", right: -5,
-          width: 0, height: 0,
-          borderTop: "5px solid transparent",
-          borderBottom: "5px solid transparent",
-          borderLeft: `6px solid ${color}`,
-          transition: "border-color 0.4s",
-        }} />
-      </div>
-    </div>
-  );
+function budgetTier(b: number): { tier: BudgetTier; color: string; desc: string } {
+  if (b < 50)  return { tier: "REJECTED", color: "#ef4444", desc: "Budget too low — min $50" };
+  if (b < 150) return { tier: "MINIMAL",  color: "#f59e0b", desc: "2 tasks: Copy + Web Dev" };
+  if (b < 500) return { tier: "STANDARD", color: "#3B82F6", desc: "4 tasks: Research + Copy + Design + Web Dev" };
+  return             { tier: "PREMIUM",   color: "#8B5CF6", desc: "Full pipeline + extra QA round" };
 }
 
-/* ─── Agent Node ────────────────────────────────────────────────── */
-function AgentNode({ agent, state, step }: {
-  agent: Agent;
-  state: ConnectorState;
-  step: number;
-}) {
-  const { bg, color, Icon: AgentIcon } =
-    CATEGORY_STYLE[agent.category] ?? { bg: "#f3f4f6", color: "#374151", Icon: Cpu };
-  const borderColor =
-    state === "active" ? "#6b7fff" :
-    state === "done"   ? "#00e96e" : "#e5e7eb";
-  const shadow =
-    state === "active" ? "0 0 0 4px #6b7fff18, 0 4px 24px rgba(107,127,255,0.18)" :
-    state === "done"   ? "0 0 0 4px #00e96e14, 0 4px 16px rgba(0,233,110,0.12)" :
-                         "0 1px 4px rgba(0,0,0,0.06)";
+const EXAMPLE_PROMPTS = [
+  "Create a landing page for a developer AI tool",
+  "Build a marketing site for a SaaS startup with dark theme",
+  "Design and develop a product showcase page for a mobile app",
+];
 
-  return (
-    <div style={{
-      width: 120, flexShrink: 0,
-      display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
-    }}>
-      <div style={{
-        width: "100%",
-        background: "white",
-        border: `1.5px solid ${borderColor}`,
-        borderRadius: 16,
-        padding: "14px 10px 12px",
-        boxShadow: shadow,
-        transition: "all 0.4s",
-        position: "relative",
-        textAlign: "center",
-      }}>
-        {/* Step badge */}
-        <div style={{
-          position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)",
-          width: 20, height: 20, borderRadius: "50%",
-          background:
-            state === "done"   ? "#00e96e" :
-            state === "active" ? "#6b7fff" : "#f3f4f6",
-          color: state === "idle" ? "#9ca3af" : "white",
-          fontSize: 9, fontWeight: 800,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          border: "2px solid white",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
-        }}>
-          {state === "done" ? "✓" : step + 1}
-        </div>
-
-        {/* Icon */}
-        <div style={{
-          width: 40, height: 40, borderRadius: 10,
-          background: bg,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          margin: "4px auto 10px",
-        }}>
-          <AgentIcon style={{ width: 18, height: 18, color }} />
-        </div>
-
-        {/* Name */}
-        <p style={{
-          fontSize: 11, fontWeight: 700,
-          color: state === "idle" ? "#374151" : "#000",
-          lineHeight: 1.3, marginBottom: 6,
-          wordBreak: "break-word",
-        }}>
-          {agent.name}
-        </p>
-
-        {/* Status chip */}
-        <span style={{
-          display: "inline-block",
-          fontSize: 9, fontWeight: 700, letterSpacing: "0.06em",
-          padding: "2px 8px", borderRadius: 10,
-          background:
-            state === "active" ? "#ede9fe" :
-            state === "done"   ? "#e8fdf0" : "#f9fafb",
-          color:
-            state === "active" ? "#4338ca" :
-            state === "done"   ? "#00a854" : "#9ca3af",
-        }}>
-          {state === "active" ? "RUNNING" : state === "done" ? "DONE" : "WAITING"}
-        </span>
-
-        {/* Price */}
-        {agent.pricePerCall > 0 && (
-          <p style={{ fontSize: 9, color: "#9ca3af", marginTop: 6 }}>
-            ${agent.pricePerCall.toFixed(3)} / çağrı
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ─── Pipeline Flow ─────────────────────────────────────────────── */
-function PipelineFlow({ agents, activeIndex }: { agents: Agent[]; activeIndex: number }) {
-  if (agents.length === 0) {
-    return (
-      <div style={{
-        border: "1.5px dashed #e5e7eb", borderRadius: 20,
-        minHeight: 180, display: "flex", alignItems: "center", justifyContent: "center",
-        background: "#fafafa",
-      }}>
-        <p style={{ fontSize: 13, color: "#9ca3af" }}>
-          Pipeline başlatıldığında akış burada görünecek
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{
-      background: "#fafafa",
-      border: "1.5px solid #f3f4f6",
-      borderRadius: 20,
-      padding: "28px 32px",
-      overflowX: "auto",
-    }}>
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        minWidth: "max-content",
-        gap: 0,
-      }}>
-        {agents.map((agent, i) => {
-          const isDone   = activeIndex > i;
-          const isActive = activeIndex === i;
-          const state: ConnectorState = isDone ? "done" : isActive ? "active" : "idle";
-          const connState: ConnectorState =
-            activeIndex > i  ? "done" :
-            activeIndex === i ? "active" : "idle";
-
-          return (
-            <div key={agent.id} style={{ display: "flex", alignItems: "center" }}>
-              <AgentNode agent={agent} state={state} step={i} />
-              {i < agents.length - 1 && (
-                <Connector
-                  state={connState}
-                  amount={isActive ? `$${agent.pricePerCall.toFixed(3)}` : undefined}
-                />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ─── Page ──────────────────────────────────────────────────────── */
-export default function PipelinePage() {
-  const {
-    addPipeline, addLiveLog, addLiveTransaction, setSimulating,
-    resetLive, liveLogs, liveTransactions, isSimulating, pipelines,
-  } = useAppStore();
-  const searchParams = useSearchParams();
-
-  const [prompt, setPrompt]             = useState(searchParams.get("prompt") ?? "");
-  const [activeAgents, setActiveAgents] = useState<Agent[]>([]);
-  const [activeIndex, setActiveIndex]   = useState(-1);
-  const [, setDone]                     = useState(false);
-  const logContainerRef = useRef<HTMLDivElement>(null);
-  const userScrolledUp  = useRef(false);
-
-  const handleLogScroll = () => {
-    const el = logContainerRef.current;
-    if (!el) return;
-    userScrolledUp.current = el.scrollHeight - el.scrollTop - el.clientHeight > 40;
+function EventRow({ event }: { event: WSEvent }) {
+  const colors: Record<string, string> = {
+    "job.":        "#3B82F6",
+    "task.":       "#8B5CF6",
+    "bidding.":    "#f59e0b",
+    "judge.":      "#10B981",
+    "payment.":    "#10B981",
+    "ledger.":     "#64748b",
+    "reputation.": "#f97316",
+    "system.":     "#64748b",
   };
+  const color = Object.entries(colors).find(([k]) => event.eventType.startsWith(k))?.[1] ?? "#64748b";
 
-  const scrollLogs = () =>
-    setTimeout(() => {
-      if (!userScrolledUp.current) {
-        const el = logContainerRef.current;
-        if (el) el.scrollTop = el.scrollHeight;
-      }
-    }, 50);
+  return (
+    <div className="flex items-start gap-3 py-2 border-b border-[#1a2440] last:border-0">
+      <span className="text-[9px] text-[#475569] mt-0.5 flex-shrink-0 w-16" style={{ fontFamily: "var(--font-jetbrains)" }}>
+        {new Date(event.timestamp).toLocaleTimeString()}
+      </span>
+      <span className="text-[10px] font-semibold flex-shrink-0" style={{ color, fontFamily: "var(--font-jetbrains)" }}>
+        {event.eventType}
+      </span>
+      <span className="text-[10px] text-[#64748b] truncate">
+        {event.payload.amount != null && <span className="text-[#10B981] font-semibold">${Number(event.payload.amount as number).toFixed(2)} </span>}
+        {event.payload.agent != null && <span className="text-[#94a3b8]">{event.payload.agent as string} </span>}
+        {event.payload.state != null && <span className="text-[#F8FAFC]">{event.payload.state as string} </span>}
+        {event.payload.score != null && <span className="text-[#f59e0b]">score={Number(event.payload.score as number).toFixed(2)}</span>}
+      </span>
+    </div>
+  );
+}
 
-  const handleRun = useCallback(async () => {
-    if (!prompt.trim() || isSimulating) return;
-    resetLive();
-    setActiveAgents([]);
-    setActiveIndex(-1);
-    setDone(false);
-    setSimulating(true);
-    let agentList: Agent[] = [];
-    let step = 0;
-    await simulatePipeline(
-      prompt,
-      (log) => {
-        addLiveLog(log);
-        scrollLogs();
-        if (log.type === "success" && log.message.includes("pipeline'a eklendi")) {
-          const name = log.message.replace("[+] ", "").replace(" pipeline'a eklendi", "").trim();
-          const found = mockAgents.find((a) => a.name === name);
-          if (found) {
-            agentList = [...agentList, found];
-            setActiveAgents([...agentList]);
-          }
-        }
-        if (log.type === "transfer") { setActiveIndex(step); step++; }
-        if (log.message.includes("tamamlandı!")) {
-          setActiveIndex(agentList.length);
-          setDone(true);
-        }
-      },
-      (tx) => addLiveTransaction(tx),
-    ).then((pipeline) => addPipeline(pipeline));
-    setSimulating(false);
-  }, [prompt, isSimulating, resetLive, setSimulating, addLiveLog, addLiveTransaction, addPipeline]);
+function TaskCard({ task, agents }: { task: Task; agents: Agent[] }) {
+  const color = TASK_STATE_COLOR[task.state];
+  const agent = agents.find(a => a.id === task.assignedAgentId);
+  const isActive = ["BIDDING", "ASSIGNED", "RUNNING", "VERIFYING"].includes(task.state);
+  const isDone = task.state === "PAID";
+
+  return (
+    <div
+      className="bg-[#131929] rounded-2xl border p-4 space-y-3 transition-all"
+      style={{ borderColor: isDone ? "#10B98130" : isActive ? `${color}40` : "#1e2d4a" }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs font-bold text-[#F8FAFC] leading-tight">{task.title}</p>
+        <span
+          className="text-[9px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+          style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}
+        >
+          {isActive && <span className="inline-block w-1.5 h-1.5 rounded-full mr-1 animate-pulse" style={{ background: color }} />}
+          {TASK_STATE_LABEL[task.state]}
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between text-[10px]">
+        <span className="text-[#64748b]">Budget: <span className="text-[#F8FAFC] font-semibold">${task.budget.toFixed(2)}</span></span>
+        {task.finalCost != null && <span className="text-[#64748b]">Cost: <span className="text-[#10B981] font-semibold">${task.finalCost.toFixed(2)}</span></span>}
+      </div>
+
+      {agent && (
+        <div className="text-[10px] text-[#64748b] flex items-center gap-1">
+          <Zap className="w-2.5 h-2.5 text-[#3B82F6]" />
+          <span className="text-[#94a3b8] font-semibold" style={{ fontFamily: "var(--font-jetbrains)" }}>{agent.displayName}</span>
+        </div>
+      )}
+
+      {task.judgeScore != null && (
+        <div className="flex items-center gap-2 pt-1 border-t border-[#1e2d4a]">
+          <span className="text-[9px] text-[#64748b]">Judge:</span>
+          <span className="text-[10px] font-bold" style={{ color: task.judgeScore >= 0.70 ? "#10B981" : "#ef4444" }}>
+            {task.judgeScore.toFixed(2)}
+          </span>
+          <span className="text-[9px]" style={{ color: task.judgeVerdict === "APPROVED" ? "#10B981" : "#f59e0b" }}>
+            {task.judgeVerdict}
+          </span>
+          {(task.revisionCount ?? 0) > 0 && (
+            <span className="text-[9px] text-[#f97316] ml-auto">{task.revisionCount}x revision</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function PipelinePage() {
+  const { agents, jobs, tasks, events, activeJobId, isSubmitting, submitJob, setActiveJobId, checkBackend, backendOnline } = useAppStore();
+  const [prompt, setPrompt] = useState("");
+  const [budget, setBudget] = useState("200");
+  const eventsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { checkBackend(); }, [checkBackend]);
 
   useEffect(() => {
-    const p = searchParams.get("prompt");
-    if (p) { setPrompt(p); setTimeout(handleRun, 300); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (eventsRef.current) eventsRef.current.scrollTop = 0;
+  }, [events.length]);
 
-  const handleReset = () => {
-    resetLive();
-    setActiveAgents([]);
-    setActiveIndex(-1);
-    setDone(false);
+  const activeJob = jobs.find(j => j.id === activeJobId) ?? jobs[0];
+  const jobTasks = tasks.filter(t => t.jobId === activeJob?.id);
+  const tierInfo = budgetTier(parseFloat(budget) || 0);
+  const jobStateIndex = activeJob ? JOB_STATE_ORDER.indexOf(activeJob.state) : -1;
+
+  const handleSubmit = async () => {
+    const b = parseFloat(budget);
+    if (!prompt.trim() || !b) return;
+    await submitJob(prompt, b);
+    setPrompt("");
   };
 
+  const recentJobs = jobs.slice(0, 8);
+
   return (
-    <>
-      <style>{`
-        @keyframes slideParticle {
-          0%   { left: -10%; }
-          100% { left: 110%; }
-        }
-        @keyframes logIn {
-          from { opacity: 0; transform: translateX(-8px); }
-          to   { opacity: 1; transform: none; }
-        }
-        .log-entry { animation: logIn 0.2s ease both; }
-      `}</style>
-
-      <div className="p-8 max-w-4xl mx-auto space-y-7">
-
-        {/* Header */}
+    <div className="p-8 max-w-6xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-black">Pipeline Oluştur</h1>
-          <p className="text-sm text-gray-400 mt-0.5">
-            Doğal dille yaz — orchestrator ajanları seçer, bağlar ve blockchain üzerinde öder
-          </p>
+          <h1 className="text-2xl font-bold text-[#F8FAFC]" style={{ fontFamily: "var(--font-space-grotesk)" }}>New Job</h1>
+          <p className="text-sm text-[#94a3b8] mt-0.5">Submit a task to the autonomous agent marketplace</p>
         </div>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full" style={{ background: backendOnline ? "#10B981" : "#334155" }} />
+          <span className="text-xs text-[#64748b]">{backendOnline ? "Backend Online" : "Demo Mode"}</span>
+        </div>
+      </div>
 
-        {/* Prompt card */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Zap className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
-              <input
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleRun()}
-                placeholder="Ne yapmak istiyorsunuz?"
-                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-black placeholder:text-gray-300 focus:outline-none focus:border-gray-300 text-sm transition-colors"
-              />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left: submission + job progress */}
+        <div className="lg:col-span-2 space-y-5">
+          {/* Submission form */}
+          <div className="bg-[#131929] rounded-2xl border border-[#1e2d4a] p-6 space-y-4">
+            <h2 className="text-sm font-bold text-[#F8FAFC]" style={{ fontFamily: "var(--font-space-grotesk)" }}>What do you need done?</h2>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="e.g. Create a landing page for a developer AI tool"
+              rows={3}
+              className="w-full bg-[#0f1525] border border-[#1e2d4a] rounded-xl px-4 py-3 text-[#F8FAFC] text-sm placeholder:text-[#475569] focus:outline-none focus:border-[#3B82F6] resize-none transition-colors"
+            />
+
+            <div className="flex items-center gap-3">
+              <div className="relative max-w-[160px]">
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#475569]" />
+                <input
+                  type="number"
+                  value={budget}
+                  onChange={(e) => setBudget(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2.5 bg-[#0f1525] border border-[#1e2d4a] rounded-xl text-[#F8FAFC] text-sm focus:outline-none focus:border-[#3B82F6] transition-colors"
+                  placeholder="200"
+                />
+              </div>
+              <div>
+                <span
+                  className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full"
+                  style={{ background: `${tierInfo.color}15`, color: tierInfo.color, border: `1px solid ${tierInfo.color}30` }}
+                >
+                  <Activity className="w-3 h-3" />
+                  {tierInfo.tier}
+                </span>
+                <p className="text-[10px] text-[#64748b] mt-1">{tierInfo.desc}</p>
+              </div>
             </div>
+
+            <div className="flex flex-wrap gap-2">
+              {EXAMPLE_PROMPTS.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPrompt(p)}
+                  className="text-[10px] px-3 py-1.5 rounded-full border transition-colors hover:border-[#3B82F6]/40 hover:text-[#F8FAFC]"
+                  style={{ background: "#0f1525", color: "#64748b", borderColor: "#1e2d4a" }}
+                >
+                  {p.length > 45 ? p.slice(0, 45) + "…" : p}
+                </button>
+              ))}
+            </div>
+
             <button
-              onClick={handleRun}
-              disabled={isSimulating || !prompt.trim()}
-              className="px-5 py-2.5 rounded-xl text-black font-bold flex items-center gap-2 text-sm transition-all disabled:opacity-30 hover:-translate-y-0.5"
-              style={{ background: "#00e96e" }}
+              onClick={handleSubmit}
+              disabled={!prompt.trim() || isSubmitting || tierInfo.tier === "REJECTED"}
+              className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-40 hover:-translate-y-0.5 disabled:hover:translate-y-0"
+              style={{ background: "#10B981", color: "#fff" }}
             >
-              {isSimulating ? (
-                <span className="w-3.5 h-3.5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-              ) : (
-                <ArrowRight className="w-3.5 h-3.5" />
-              )}
-              {isSimulating ? "Çalışıyor…" : "Çalıştır"}
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {isSubmitting ? "Submitting…" : "Submit Job"}
             </button>
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
-            {EXAMPLES.map((p) => (
-              <button
-                key={p}
-                onClick={() => setPrompt(p)}
-                className="text-xs px-3 py-1.5 rounded-full transition-all hover:bg-gray-200"
-                style={{ background: "#f0f0f0", color: "#666" }}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Flow visualization */}
-        <div className="space-y-2">
-          {activeAgents.length > 0 && (
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Ajan Akışı</p>
-              {!isSimulating && activeIndex >= activeAgents.length && (
-                <span
-                  className="text-[10px] font-bold px-3 py-1 rounded-full"
-                  style={{ background: "#e8fdf0", color: "#00a854" }}
-                >
-                  Pipeline tamamlandı
-                </span>
-              )}
-            </div>
-          )}
-          <PipelineFlow agents={activeAgents} activeIndex={activeIndex} />
-        </div>
-
-        {/* Log + transfers */}
-        {(liveLogs.length > 0 || liveTransactions.length > 0) && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-
-            {/* Terminal */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Log</p>
-                <button
-                  onClick={handleReset}
-                  className="text-xs text-gray-400 hover:text-black flex items-center gap-1 transition-colors"
-                >
-                  <RotateCcw className="w-3 h-3" /> Temizle
-                </button>
-              </div>
-              <div
-                ref={logContainerRef}
-                onScroll={handleLogScroll}
-                className="rounded-2xl p-4 overflow-y-auto font-mono"
-                style={{ background: "#0d1117", height: 260 }}
-              >
-                {liveLogs.map((log, i) => (
-                  <div
-                    key={i}
-                    className="log-entry flex gap-2 mb-1"
-                    style={{ fontSize: 11, animationDelay: `${i * 15}ms` }}
-                  >
-                    <span style={{ color: "#374151", flexShrink: 0 }}>
-                      {new Date(log.timestamp).toLocaleTimeString("tr-TR")}
-                    </span>
-                    <span style={{ color: LOG_COLORS[log.type], lineHeight: 1.5 }}>
-                      {log.message}
-                    </span>
-                  </div>
-                ))}
-
-              </div>
-            </div>
-
-            {/* Chain transfers */}
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Zincir Transferleri</p>
-              <div style={{ height: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
-                {liveTransactions.map((tx) => {
-                  const from =
-                    tx.fromAgentId === "user"
-                      ? "Kullanıcı"
-                      : mockAgents.find((a) => a.id === tx.fromAgentId)?.name ?? tx.fromAgentId;
-                  const to = mockAgents.find((a) => a.id === tx.toAgentId)?.name ?? tx.toAgentId;
-                  return (
-                    <div
-                      key={tx.id}
-                      className="bg-white rounded-2xl border border-gray-100 p-4"
-                      style={{ flexShrink: 0 }}
+          {/* Active job */}
+          {activeJob && (
+            <div className="bg-[#131929] rounded-2xl border border-[#1e2d4a] p-6 space-y-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] text-[#64748b]" style={{ fontFamily: "var(--font-jetbrains)" }}>{activeJob.id}</span>
+                    <span
+                      className="text-[9px] font-bold px-2 py-0.5 rounded-full"
+                      style={{
+                        background: activeJob.state === "COMPLETED" ? "#10B98120" : activeJob.state === "FAILED" || activeJob.state === "REJECTED" ? "#ef444420" : "#3B82F620",
+                        color: activeJob.state === "COMPLETED" ? "#10B981" : activeJob.state === "FAILED" || activeJob.state === "REJECTED" ? "#ef4444" : "#3B82F6",
+                      }}
                     >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-black">
-                          <span>{from}</span>
-                          <ArrowRight className="w-3 h-3 text-gray-300" />
-                          <span>{to}</span>
+                      {activeJob.state}
+                    </span>
+                    {activeJob.budgetTier && (
+                      <span className="text-[9px] text-[#64748b] bg-[#1a2440] px-2 py-0.5 rounded-full">{activeJob.budgetTier}</span>
+                    )}
+                  </div>
+                  <p className="text-sm font-semibold text-[#F8FAFC] mt-1 leading-tight">{activeJob.userPrompt}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-lg font-bold text-[#F8FAFC]">${activeJob.budget.toFixed(0)}</p>
+                  {activeJob.managerBidAmount != null && (
+                    <p className="text-[10px] text-[#64748b]">bid ${activeJob.managerBidAmount.toFixed(0)}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Pipeline steps */}
+              <div className="flex items-center gap-1">
+                {JOB_STATES.map((step, i) => {
+                  const done   = jobStateIndex > i;
+                  const active = jobStateIndex === i;
+                  const failed = (activeJob.state === "FAILED" || activeJob.state === "REJECTED") && jobStateIndex === i;
+                  return (
+                    <div key={step.key} className="flex items-center gap-1 flex-1 min-w-0">
+                      <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
+                        <div
+                          className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                          style={{
+                            background: failed ? "#ef444420" : done ? "#10B98120" : active ? "#3B82F620" : "#1a2440",
+                            border: `1.5px solid ${failed ? "#ef4444" : done ? "#10B981" : active ? "#3B82F6" : "#1e2d4a"}`,
+                          }}
+                        >
+                          {failed   ? <AlertCircle className="w-3 h-3 text-[#ef4444]" /> :
+                           done     ? <CheckCircle className="w-3 h-3 text-[#10B981]" /> :
+                           active   ? <Loader2 className="w-3 h-3 text-[#3B82F6] animate-spin" /> :
+                                      <Clock className="w-3 h-3 text-[#334155]" />}
                         </div>
-                        <span className="text-sm font-bold" style={{ color: "#6b7fff" }}>
-                          ${tx.amount.toFixed(3)}
+                        <span className="text-[8px] text-center leading-tight" style={{ color: done ? "#10B981" : active ? "#3B82F6" : "#334155" }}>
+                          {step.label}
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { label: "Tx Hash", value: `${tx.txHash.slice(0, 14)}…`, mono: true },
-                          { label: "Blok",    value: `#${tx.blockNumber.toLocaleString()}` },
-                          { label: "AGT",     value: `${tx.agtAmount} AGT` },
-                          { label: "Gas",     value: tx.gasUsed.toLocaleString() },
-                        ].map(({ label, value, mono }) => (
-                          <div key={label} className="bg-gray-50 rounded-xl p-2">
-                            <p className="text-[9px] text-gray-400 mb-0.5">{label}</p>
-                            <p className={`text-[10px] font-semibold text-black ${mono ? "font-mono" : ""}`}>
-                              {value}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-2.5">
-                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: "#00e96e" }} />
-                        <span className="text-[10px] font-semibold" style={{ color: "#00e96e" }}>
-                          Onaylandı
-                        </span>
-                      </div>
+                      {i < JOB_STATES.length - 1 && (
+                        <ArrowRight className="w-3 h-3 flex-shrink-0 mb-3.5" style={{ color: done ? "#10B981" : "#1e2d4a" }} />
+                      )}
                     </div>
                   );
                 })}
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* Saved pipelines */}
-        {pipelines.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-              Kayıtlı Pipeline&apos;lar
-            </p>
-            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-              {pipelines.map((p, i) => (
-                <button
-                  key={p.id}
-                  onClick={() => setPrompt(p.prompt)}
-                  className={`w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50 transition-colors ${
-                    i < pipelines.length - 1 ? "border-b border-gray-100" : ""
-                  }`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-black truncate">{p.prompt}</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">
-                      {p.agents.length} ajan · {p.runCount} çalıştırma · ${p.totalCost.toFixed(3)}
-                    </p>
+              {activeJob.assignedManagerId && (
+                <div className="flex items-center gap-2 text-xs text-[#64748b] bg-[#0f1525] rounded-xl px-3 py-2 border border-[#1e2d4a]">
+                  <Zap className="w-3 h-3 text-[#3B82F6]" />
+                  <span className="font-semibold text-[#94a3b8]" style={{ fontFamily: "var(--font-jetbrains)" }}>{activeJob.assignedManagerId}</span>
+                  {activeJob.managerProfitMargin != null && (
+                    <span className="ml-auto text-[#64748b]">{Math.round(activeJob.managerProfitMargin * 100)}% margin</span>
+                  )}
+                </div>
+              )}
+
+              {jobTasks.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-[#64748b] mb-3 uppercase tracking-wider">Task DAG · {jobTasks.length} tasks</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {jobTasks.map((t) => <TaskCard key={t.id} task={t} agents={agents} />)}
                   </div>
-                  <span
-                    className="ml-4 text-[9px] px-2.5 py-1 rounded-full font-bold flex-shrink-0 uppercase tracking-wide"
-                    style={
-                      p.status === "active"
-                        ? { background: "#e8fdf0", color: "#00a854" }
-                        : p.status === "paused"
-                        ? { background: "#fff3e0", color: "#e67e00" }
-                        : { background: "#f5f5f5", color: "#999" }
-                    }
+                </div>
+              )}
+            </div>
+          )}
+
+          {recentJobs.length > 1 && (
+            <div className="bg-[#131929] rounded-2xl border border-[#1e2d4a] p-5">
+              <h3 className="text-xs font-bold text-[#F8FAFC] mb-3" style={{ fontFamily: "var(--font-space-grotesk)" }}>Recent Jobs</h3>
+              <div className="space-y-2">
+                {recentJobs.filter(j => j.id !== activeJobId).map((job) => (
+                  <button
+                    key={job.id}
+                    onClick={() => setActiveJobId(job.id)}
+                    className="w-full flex items-center justify-between p-3 rounded-xl border transition-all hover:border-[#3B82F6]/30"
+                    style={{ background: "#0f1525", borderColor: "#1e2d4a" }}
                   >
-                    {p.status === "active" ? "Aktif" : p.status === "paused" ? "Durduruldu" : "Tamamlandı"}
-                  </span>
-                </button>
-              ))}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[9px] text-[#475569] flex-shrink-0" style={{ fontFamily: "var(--font-jetbrains)" }}>{job.id.slice(0, 12)}</span>
+                      <span className="text-xs text-[#94a3b8] truncate">{job.userPrompt}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                      <span className="text-[9px] font-bold" style={{ color: job.state === "COMPLETED" ? "#10B981" : job.state === "FAILED" ? "#ef4444" : "#3B82F6" }}>{job.state}</span>
+                      <ChevronRight className="w-3 h-3 text-[#334155]" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right: event feed */}
+        <div className="space-y-4">
+          <div className="bg-[#080e1a] rounded-2xl border border-[#1e2d4a] overflow-hidden flex flex-col" style={{ height: "600px" }}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e2d4a] bg-[#0d1220]">
+              <div className="flex items-center gap-2">
+                <Hash className="w-3.5 h-3.5 text-[#3B82F6]" />
+                <span className="text-xs font-bold text-[#F8FAFC]" style={{ fontFamily: "var(--font-space-grotesk)" }}>Event Feed</span>
+              </div>
+              <span className="text-[10px] text-[#64748b]">{events.length} events</span>
+            </div>
+            <div ref={eventsRef} className="flex-1 overflow-y-auto px-3 py-2">
+              {events.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <Activity className="w-8 h-8 text-[#1e2d4a] mb-2" />
+                  <p className="text-xs text-[#475569]">Submit a job to see live events</p>
+                </div>
+              ) : (
+                events.map((ev, i) => <EventRow key={i} event={ev} />)
+              )}
             </div>
           </div>
-        )}
+
+          <div className="bg-[#131929] rounded-2xl border border-[#1e2d4a] p-4 space-y-3">
+            <h3 className="text-xs font-bold text-[#F8FAFC]" style={{ fontFamily: "var(--font-space-grotesk)" }}>Budget Tiers</h3>
+            {[
+              { tier: "REJECTED", range: "< $50",   color: "#ef4444", desc: "No manager available" },
+              { tier: "MINIMAL",  range: "$50–149",  color: "#f59e0b", desc: "Copy + Web Dev" },
+              { tier: "STANDARD", range: "$150–499", color: "#3B82F6", desc: "Full 4-task pipeline" },
+              { tier: "PREMIUM",  range: "$500+",    color: "#8B5CF6", desc: "Standard + extra QA" },
+            ].map(({ tier, range, color, desc }) => (
+              <div key={tier} className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+                <div>
+                  <span className="text-[10px] font-bold" style={{ color }}>{tier}</span>
+                  <span className="text-[10px] text-[#64748b] ml-2">{range}</span>
+                  <p className="text-[9px] text-[#475569]">{desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
-    </>
+    </div>
   );
 }

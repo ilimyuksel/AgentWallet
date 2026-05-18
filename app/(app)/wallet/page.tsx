@@ -2,176 +2,257 @@
 
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Coins, TrendingUp, Activity, Coffee, MessageCircle, Navigation, Cloud, Cpu } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Transaction, TransactionType, WalletOwnerType } from "@/types";
+import {
+  Activity, Shield, User, Lock,
+  ChevronDown, ChevronRight, Hash, Plus,
+} from "lucide-react";
 
-const CATEGORY_ICONS: Record<string, LucideIcon> = {
-  finance:       TrendingUp,
-  food:          Coffee,
-  communication: MessageCircle,
-  transport:     Navigation,
-  weather:       Cloud,
-  productivity:  Cpu,
+const TX_TYPE_STYLE: Record<TransactionType, { label: string; color: string }> = {
+  GENESIS:           { label: "Genesis",          color: "#334155" },
+  ESCROW_LOCK:       { label: "Escrow Lock",       color: "#3B82F6" },
+  MANAGER_FUNDING:   { label: "Manager Funding",   color: "#8B5CF6" },
+  MILESTONE_RELEASE: { label: "Milestone",         color: "#10B981" },
+  JUDGE_FEE:         { label: "Judge Fee",         color: "#f59e0b" },
+  PM_PROFIT:         { label: "PM Profit",         color: "#8B5CF6" },
+  AGENT_PAYMENT:     { label: "Agent Payment",     color: "#10B981" },
+  REFUND:            { label: "Refund",            color: "#64748b" },
 };
 
-const typeLabels: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-  user_to_agent:     { label: "Kullanıcı → Ajan", icon: <ArrowDownRight className="w-3 h-3" />, color: "text-green-500" },
-  agent_to_agent:    { label: "Ajan → Ajan",       icon: <ArrowLeftRight className="w-3 h-3" />, color: "text-[#6b7fff]" },
-  agent_to_external: { label: "Ajan → Dış Servis", icon: <ArrowUpRight className="w-3 h-3" />,   color: "text-orange-500" },
+const OWNER_ICON: Record<WalletOwnerType, React.ReactNode> = {
+  USER:   <User className="w-4 h-4" />,
+  ESCROW: <Lock className="w-4 h-4" />,
+  AGENT:  <Activity className="w-4 h-4" />,
+  SYSTEM: <Shield className="w-4 h-4" />,
 };
 
-const agentGradients: Record<string, string> = {
-  finance:       "linear-gradient(135deg,#f6d365,#fda085)",
-  food:          "linear-gradient(135deg,#84fab0,#8fd3f4)",
-  communication: "linear-gradient(135deg,#a18cd1,#fbc2eb)",
-  transport:     "linear-gradient(135deg,#4facfe,#00f2fe)",
-  weather:       "linear-gradient(135deg,#43e97b,#38f9d7)",
-  productivity:  "linear-gradient(135deg,#f093fb,#f5576c)",
+const OWNER_COLOR: Record<WalletOwnerType, string> = {
+  USER:   "#3B82F6",
+  ESCROW: "#f59e0b",
+  AGENT:  "#8B5CF6",
+  SYSTEM: "#64748b",
 };
+
+function truncHash(h: string, n = 8) {
+  return `${h.slice(0, n)}…${h.slice(-4)}`;
+}
+
+function TxRow({ tx, walletNames }: { tx: Transaction; walletNames: Record<string, string> }) {
+  const [expanded, setExpanded] = useState(false);
+  const style = TX_TYPE_STYLE[tx.transactionType] ?? { label: tx.transactionType, color: "#64748b" };
+  const fromName = walletNames[tx.fromWalletId] ?? tx.fromWalletId.slice(0, 16) + "…";
+  const toName   = walletNames[tx.toWalletId]   ?? tx.toWalletId.slice(0, 16)   + "…";
+
+  return (
+    <>
+      <tr
+        className="border-b border-[#1a2440] hover:bg-[#1a2440]/40 cursor-pointer transition-colors"
+        onClick={() => setExpanded(e => !e)}
+      >
+        <td className="p-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] font-bold" style={{ color: "#64748b", fontFamily: "var(--font-jetbrains)" }}>#{tx.blockNumber}</span>
+            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${style.color}15`, color: style.color }}>
+              {style.label}
+              {tx.milestone && <span className="ml-1 opacity-70">·{tx.milestone}</span>}
+            </span>
+          </div>
+        </td>
+        <td className="p-3 text-[10px] text-[#94a3b8]">
+          <span className="text-[#64748b]">{fromName}</span>
+          <ArrowRight className="w-2.5 h-2.5 inline mx-1 text-[#334155]" />
+          <span>{toName}</span>
+        </td>
+        <td className="p-3 text-right">
+          <span className="text-xs font-bold" style={{ color: tx.amount > 0 ? "#F8FAFC" : "#334155" }}>
+            {tx.amount > 0 ? `$${tx.amount.toFixed(2)}` : "—"}
+          </span>
+        </td>
+        <td className="p-3 text-right hidden lg:table-cell">
+          <span className="text-[10px] text-[#64748b]" style={{ fontFamily: "var(--font-jetbrains)" }}>
+            {truncHash(tx.blockHash)}
+          </span>
+        </td>
+        <td className="p-3 text-right w-8">
+          {expanded ? <ChevronDown className="w-3 h-3 text-[#64748b] ml-auto" /> : <ChevronRight className="w-3 h-3 text-[#64748b] ml-auto" />}
+        </td>
+      </tr>
+      {expanded && (
+        <tr className="border-b border-[#1a2440] bg-[#080e1a]">
+          <td colSpan={5} className="px-4 py-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[10px]" style={{ fontFamily: "var(--font-jetbrains)" }}>
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <span className="text-[#475569] w-28 flex-shrink-0">block_hash</span>
+                  <span className="text-[#64748b] break-all">{tx.blockHash}</span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-[#475569] w-28 flex-shrink-0">prev_hash</span>
+                  <span className="text-[#475569] break-all">{tx.previousBlockHash.slice(0, 32)}…</span>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <span className="text-[#475569] w-28 flex-shrink-0">from_wallet</span>
+                  <span className="text-[#94a3b8]">{tx.fromWalletId}</span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-[#475569] w-28 flex-shrink-0">to_wallet</span>
+                  <span className="text-[#94a3b8]">{tx.toWalletId}</span>
+                </div>
+                {tx.description && (
+                  <div className="flex gap-2">
+                    <span className="text-[#475569] w-28 flex-shrink-0">description</span>
+                    <span className="text-[#64748b]">{tx.description}</span>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <span className="text-[#475569] w-28 flex-shrink-0">created_at</span>
+                  <span className="text-[#64748b]">{new Date(tx.createdAt).toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function ArrowRight({ className, ...props }: React.SVGProps<SVGSVGElement> & { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M5 12h14M12 5l7 7-7 7" />
+    </svg>
+  );
+}
 
 export default function WalletPage() {
   const { agents, wallets, transactions, fundWallet } = useAppStore();
-  const [fundingAgent, setFundingAgent] = useState<string | null>(null);
-  const [fundAmount,   setFundAmount]   = useState("10");
+  const [fundingWalletId, setFundingWalletId] = useState<string | null>(null);
+  const [fundAmount, setFundAmount] = useState("50");
+  const [txFilter, setTxFilter] = useState<TransactionType | "ALL">("ALL");
 
-  const totalBalance = wallets.reduce((s, w) => s + w.balance, 0);
-  const totalAgt     = wallets.reduce((s, w) => s + w.agtBalance, 0);
-  const totalSpent   = transactions
-    .filter((t) => t.type === "agent_to_agent" || t.type === "agent_to_external")
-    .reduce((s, t) => s + t.amount, 0);
+  const userWallets   = wallets.filter(w => w.ownerType === "USER");
+  const escrowWallets = wallets.filter(w => w.ownerType === "ESCROW");
+  const agentWallets  = wallets.filter(w => w.ownerType === "AGENT");
+  const systemWallets = wallets.filter(w => w.ownerType === "SYSTEM");
 
-  const agentsWithWallets = agents
-    .map((a) => ({ agent: a, wallet: wallets.find((w) => w.agentId === a.id)! }))
-    .filter((x) => x.wallet);
+  const totalBalance = userWallets.reduce((s, w) => s + w.balance, 0);
+  const totalEscrow  = escrowWallets.reduce((s, w) => s + w.balance, 0);
+  const totalAgents  = agentWallets.reduce((s, w) => s + w.balance, 0);
 
-  const getAgentName = (id: string) => {
-    if (id === "user") return "Kullanıcı";
-    return agents.find((a) => a.id === id)?.name ?? id;
-  };
+  const walletNames: Record<string, string> = {};
+  wallets.forEach(w => {
+    walletNames[w.id] = w.id
+      .replace("wallet_", "")
+      .replace(/_001$/, "_001")
+      .replace(/_002$/, "_002");
+  });
 
-  const handleFund = () => {
-    if (!fundingAgent) return;
-    fundWallet(fundingAgent, parseFloat(fundAmount) || 0);
-    setFundingAgent(null);
-    setFundAmount("10");
-  };
+  const filteredTx = txFilter === "ALL"
+    ? transactions
+    : transactions.filter(t => t.transactionType === txFilter);
+
+  const getAgentForWallet = (walletId: string) =>
+    agents.find(a => a.walletId === walletId);
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-8">
-
+    <div className="p-8 max-w-6xl mx-auto space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-black">Agent Wallet</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Tüm ajan bakiyeleri ve transfer geçmişi</p>
+        <h1 className="text-2xl font-bold text-[#F8FAFC]" style={{ fontFamily: "var(--font-space-grotesk)" }}>Wallet</h1>
+        <p className="text-sm text-[#94a3b8] mt-0.5">Multi-owner wallets · Hash-chained ledger</p>
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
-          { icon: Coins,      label: "Toplam Bakiye",  value: `$${totalBalance.toFixed(2)}`, sub: `${totalAgt.toLocaleString()} AGT` },
-          { icon: TrendingUp, label: "Toplam Harcama", value: `$${totalSpent.toFixed(2)}`,   sub: `${transactions.length} işlem` },
-          { icon: Activity,   label: "Aktif Ajan",     value: agents.filter((a) => a.isConnected).length, sub: `${agents.length} ajandan` },
-        ].map(({ icon: Icon, label, value, sub }) => (
-          <div key={label} className="rounded-2xl p-6" style={{ background: "#f5f5f5" }}>
-            <Icon className="w-5 h-5 text-gray-400 mb-3" />
-            <p className="text-3xl font-bold text-black leading-none mb-1">{value}</p>
-            <p className="text-xs font-medium text-black">{label}</p>
-            <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>
+          { icon: User,     label: "User Balance",  value: `$${totalBalance.toFixed(2)}`, sub: `${userWallets.length} user wallets`,   color: "#3B82F6" },
+          { icon: Lock,     label: "In Escrow",     value: `$${totalEscrow.toFixed(2)}`,  sub: `${escrowWallets.length} escrow wallets`, color: "#f59e0b" },
+          { icon: Activity, label: "Agent Earnings",value: `$${totalAgents.toFixed(2)}`,  sub: `${agentWallets.length} agent wallets`,  color: "#8B5CF6" },
+        ].map(({ icon: Icon, label, value, sub, color }) => (
+          <div key={label} className="rounded-2xl p-6 bg-[#131929] border border-[#1e2d4a]">
+            <Icon className="w-5 h-5 mb-3" style={{ color }} />
+            <p className="text-3xl font-bold text-[#F8FAFC] leading-none mb-1">{value}</p>
+            <p className="text-xs font-medium text-[#F8FAFC]">{label}</p>
+            <p className="text-[10px] text-[#94a3b8] mt-0.5">{sub}</p>
           </div>
         ))}
       </div>
 
-      {/* Agent wallets grid */}
-      <div>
-        <h2 className="text-sm font-bold text-black mb-4">Ajan Bakiyeleri</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {agentsWithWallets.map(({ agent, wallet }) => {
-            const pct   = Math.min((wallet.balance / 20) * 100, 100);
-            const isLow = wallet.balance > 0 && wallet.balance < 2;
-            const grad  = agentGradients[agent.category] ?? "linear-gradient(135deg,#e0e0e0,#ccc)";
-            return (
-              <div key={agent.id} className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: grad }}>
-                      {(() => { const Icon = CATEGORY_ICONS[agent.category] ?? Cpu; return <Icon className="w-4 h-4 text-white opacity-90" />; })()}
+      {/* Wallet groups */}
+      {[
+        { type: "USER"   as WalletOwnerType, wallets: userWallets,   label: "User Wallets" },
+        { type: "ESCROW" as WalletOwnerType, wallets: escrowWallets,  label: "Escrow Wallets" },
+        { type: "AGENT"  as WalletOwnerType, wallets: agentWallets,   label: "Agent Wallets" },
+        { type: "SYSTEM" as WalletOwnerType, wallets: systemWallets,  label: "System Wallets" },
+      ].filter(g => g.wallets.length > 0).map(group => (
+        <div key={group.type}>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-5 h-5 rounded-lg flex items-center justify-center" style={{ background: `${OWNER_COLOR[group.type]}20`, color: OWNER_COLOR[group.type] }}>
+              {OWNER_ICON[group.type]}
+            </div>
+            <h2 className="text-sm font-bold text-[#F8FAFC]" style={{ fontFamily: "var(--font-space-grotesk)" }}>{group.label}</h2>
+            <span className="text-[10px] text-[#64748b] bg-[#1a2440] px-2 py-0.5 rounded-full">{group.wallets.length}</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {group.wallets.map(wallet => {
+              const agentEntry = group.type === "AGENT" ? getAgentForWallet(wallet.id) : null;
+              const isLow = wallet.balance > 0 && wallet.balance < 5 && group.type === "AGENT";
+              return (
+                <div key={wallet.id} className="bg-[#131929] rounded-2xl border border-[#1e2d4a] p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-[#F8FAFC] truncate" style={{ fontFamily: "var(--font-jetbrains)" }}>
+                        {wallet.id}
+                      </p>
+                      {agentEntry && (
+                        <p className="text-[10px] text-[#64748b] mt-0.5">{agentEntry.role} · Rep {agentEntry.reputation.toFixed(2)}</p>
+                      )}
+                      {wallet.ownerId && !agentEntry && (
+                        <p className="text-[10px] text-[#64748b] mt-0.5">{wallet.ownerId}</p>
+                      )}
                     </div>
-                    <div>
-                      <p className="text-sm font-bold text-black leading-tight">{agent.name}</p>
-                      <p className="text-[10px] text-gray-400 font-mono mt-0.5">{agent.walletAddress}</p>
-                    </div>
+                    <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ background: wallet.balance > 0 ? OWNER_COLOR[wallet.ownerType] : "#334155" }} />
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <div
-                      className="w-2 h-2 rounded-full"
-                      style={{
-                        background: agent.status === "active"  ? "#00e96e"
-                                  : agent.status === "running" ? "#6b7fff"
-                                  : agent.status === "error"   ? "#ff4d4d"
-                                  :                              "#ddd",
-                      }}
-                    />
+
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-2xl font-bold text-[#F8FAFC]">${wallet.balance.toFixed(2)}</span>
+                    <span className="text-[10px] text-[#64748b]">{wallet.currency}</span>
                   </div>
+
+                  {isLow && <p className="text-[10px] text-[#f59e0b]">Low balance</p>}
+
+                  {group.type === "AGENT" && (
+                    <button
+                      onClick={() => setFundingWalletId(wallet.id)}
+                      className="w-full py-1.5 rounded-xl text-[10px] font-bold transition-all hover:-translate-y-0.5 flex items-center justify-center gap-1"
+                      style={{ background: "#1a2440", color: "#94a3b8", border: "1px solid #1e2d4a" }}
+                    >
+                      <Plus className="w-3 h-3" /> Fund
+                    </button>
+                  )}
                 </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-2xl font-bold text-black">${wallet.balance.toFixed(2)}</span>
-                    <span className="text-xs text-gray-400">{wallet.agtBalance.toLocaleString()} AGT</span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{ width: `${pct}%`, background: isLow ? "#ff4d4d" : "#00e96e" }}
-                    />
-                  </div>
-                  {isLow && <p className="text-[10px] text-orange-500">Düşük bakiye — fon ekleyin</p>}
-                  {wallet.balance === 0 && <p className="text-[10px] text-gray-400">Henüz fonlanmamış</p>}
-                </div>
-
-                {agent.pricePerCall > 0 && (
-                  <p className="text-[10px] text-gray-400 border-t border-gray-100 pt-2">
-                    Çağrı başına: <span className="font-semibold text-black">${agent.pricePerCall.toFixed(3)}</span>
-                    {wallet.balance > 0 && (
-                      <> · Kalan: <span className="font-semibold text-black">
-                        {Math.floor(wallet.balance / agent.pricePerCall).toLocaleString()}
-                      </span> çağrı</>
-                    )}
-                  </p>
-                )}
-
-                <button
-                  onClick={() => setFundingAgent(agent.id)}
-                  className="w-full py-2 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5"
-                  style={{ background: "#f0f0f0", color: "#000" }}
-                >
-                  + Fon Ekle
-                </button>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      ))}
 
       {/* Fund modal */}
-      {fundingAgent && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-3xl p-7 w-80 space-y-5 shadow-2xl">
-            <h3 className="font-bold text-black">
-              {getAgentName(fundingAgent)}&apos;e Fon Ekle
-            </h3>
+      {fundingWalletId && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-[#131929] rounded-3xl p-7 w-80 space-y-5 shadow-2xl border border-[#1e2d4a]">
+            <h3 className="font-bold text-[#F8FAFC]" style={{ fontFamily: "var(--font-space-grotesk)" }}>Fund Wallet</h3>
+            <p className="text-[10px] text-[#64748b]" style={{ fontFamily: "var(--font-jetbrains)" }}>{fundingWalletId}</p>
             <div className="grid grid-cols-3 gap-2">
-              {["5", "10", "25", "50", "100", "200"].map((v) => (
+              {["10", "25", "50", "100", "200", "500"].map(v => (
                 <button
                   key={v}
                   onClick={() => setFundAmount(v)}
                   className="py-2 rounded-xl text-sm font-bold transition-all"
-                  style={
-                    fundAmount === v
-                      ? { background: "#000", color: "#fff" }
-                      : { background: "#f5f5f5", color: "#333" }
-                  }
+                  style={fundAmount === v ? { background: "#3B82F6", color: "#fff" } : { background: "#1a2440", color: "#94a3b8" }}
                 >
                   ${v}
                 </button>
@@ -180,40 +261,61 @@ export default function WalletPage() {
             <input
               type="number"
               value={fundAmount}
-              onChange={(e) => setFundAmount(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 text-black text-sm focus:outline-none focus:border-gray-300"
-              placeholder="Özel miktar"
+              onChange={e => setFundAmount(e.target.value)}
+              className="w-full bg-[#0f1525] border border-[#1e2d4a] rounded-xl px-3 py-2.5 text-[#F8FAFC] text-sm focus:outline-none focus:border-[#3B82F6]"
+              placeholder="Custom amount"
             />
             <div className="flex gap-2">
               <button
-                onClick={() => setFundingAgent(null)}
-                className="flex-1 py-2.5 rounded-xl bg-gray-50 text-gray-500 text-sm font-semibold hover:bg-gray-100 transition-colors"
+                onClick={() => setFundingWalletId(null)}
+                className="flex-1 py-2.5 rounded-xl text-[#94a3b8] text-sm font-semibold"
+                style={{ background: "#1a2440" }}
               >
-                İptal
+                Cancel
               </button>
               <button
-                onClick={handleFund}
-                className="flex-1 py-2.5 rounded-xl text-black text-sm font-bold transition-all hover:-translate-y-0.5"
-                style={{ background: "#00e96e" }}
+                onClick={() => { fundWallet(fundingWalletId, parseFloat(fundAmount) || 0); setFundingWalletId(null); setFundAmount("50"); }}
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-bold transition-all hover:-translate-y-0.5"
+                style={{ background: "#10B981" }}
               >
-                Fonla
+                Fund
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Transaction history */}
+      {/* Hash-chained Ledger */}
       <div>
-        <h2 className="text-sm font-bold text-black mb-4">Transfer Geçmişi</h2>
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Hash className="w-4 h-4 text-[#3B82F6]" />
+            <h2 className="text-sm font-bold text-[#F8FAFC]" style={{ fontFamily: "var(--font-space-grotesk)" }}>Hash-Chained Ledger</h2>
+            <span className="text-[10px] text-[#64748b] bg-[#1a2440] px-2 py-0.5 rounded-full">{transactions.length} blocks</span>
+          </div>
+          {/* TX type filters */}
+          <div className="flex gap-1.5 flex-wrap justify-end">
+            {(["ALL", "ESCROW_LOCK", "MILESTONE_RELEASE", "JUDGE_FEE", "REFUND"] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setTxFilter(f)}
+                className="text-[9px] font-bold px-2.5 py-1 rounded-full transition-all"
+                style={txFilter === f ? { background: "#3B82F6", color: "#fff" } : { background: "#1a2440", color: "#64748b" }}
+              >
+                {f === "ALL" ? "All" : TX_TYPE_STYLE[f]?.label ?? f}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-[#131929] rounded-2xl border border-[#1e2d4a] overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                {["İşlem", "Gönderen", "Alıcı", "Tutar", "Blok", "Tx Hash"].map((h, i) => (
+              <tr className="border-b border-[#1e2d4a] bg-[#0f1525]">
+                {["Block · Type", "From → To", "Amount", "Hash", ""].map((h, i) => (
                   <th
-                    key={h}
-                    className={`text-[10px] font-semibold text-gray-400 uppercase tracking-wider p-4 ${i >= 2 ? "text-right" : "text-left"} ${h === "Tx Hash" ? "hidden lg:table-cell" : ""}`}
+                    key={h + i}
+                    className={`text-[9px] font-semibold text-[#64748b] uppercase tracking-wider p-3 ${i >= 2 ? "text-right" : "text-left"} ${h === "Hash" ? "hidden lg:table-cell" : ""}`}
                   >
                     {h}
                   </th>
@@ -221,35 +323,17 @@ export default function WalletPage() {
               </tr>
             </thead>
             <tbody>
-              {transactions.map((tx, i) => {
-                const typeInfo = typeLabels[tx.type];
-                return (
-                  <tr
-                    key={tx.id}
-                    className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${i === transactions.length - 1 ? "border-b-0" : ""}`}
-                  >
-                    <td className="p-4">
-                      <span className={`flex items-center gap-1.5 ${typeInfo.color}`}>
-                        {typeInfo.icon}
-                        <span className="text-[10px] font-semibold">{typeInfo.label}</span>
-                      </span>
-                    </td>
-                    <td className="p-4 text-xs text-black font-medium">{getAgentName(tx.fromAgentId)}</td>
-                    <td className="p-4 text-xs text-black font-medium">{getAgentName(tx.toAgentId)}</td>
-                    <td className="p-4 text-right">
-                      <span className="text-xs font-bold text-black">${tx.amount.toFixed(2)}</span>
-                      <span className="text-[10px] text-gray-400 ml-1">{tx.agtAmount} AGT</span>
-                    </td>
-                    <td className="p-4 text-right text-xs text-gray-400">#{tx.blockNumber.toLocaleString()}</td>
-                    <td className="p-4 hidden lg:table-cell">
-                      <span className="text-[10px] font-mono text-gray-400">{tx.txHash.slice(0, 18)}...</span>
-                    </td>
-                  </tr>
-                );
-              })}
+              {filteredTx.map(tx => (
+                <TxRow key={tx.id} tx={tx} walletNames={walletNames} />
+              ))}
             </tbody>
           </table>
         </div>
+
+        <p className="text-[10px] text-[#475569] mt-3 flex items-center gap-1.5">
+          <Hash className="w-3 h-3" />
+          Each block's <span className="text-[#64748b]">block_hash</span> is SHA-256 of the transaction data + <span className="text-[#64748b]">previous_block_hash</span>. Click any row to inspect the chain.
+        </p>
       </div>
     </div>
   );
