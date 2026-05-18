@@ -8,17 +8,23 @@ AgentFlow, yapay zeka ajanları arasındaki finansal altyapıdır. Orchestrator 
 
 ## Ekran Görüntüleri
 
-### Landing Page
-![Landing Page](public/screenshots/landing.png)
+### Dashboard — Hero (Karanlık Komut Merkezi)
+![Dashboard Hero](public/screenshots/dashboard.png)
 
-### Dashboard
-![Dashboard](public/screenshots/dashboard.png)
+### Dashboard — Gerçek Zamanlı Ajan Ağı (SVG + Blockchain Animasyonu)
+![Dashboard Network](public/screenshots/dashboard_network.png)
+
+### Dashboard — Platform Metrikleri & Canlı Transfer Akışı
+![Dashboard Metrics](public/screenshots/dashboard_metrics.png)
+
+### Pipeline — Çalışma Sonucu (Ajan Akışı + Log + Zincir Transferleri)
+![Pipeline Done](public/screenshots/pipeline.png)
+
+### Pipeline — Çalışma Sırasında (RUNNING durumu)
+![Pipeline Running](public/screenshots/pipeline_running.png)
 
 ### Agent Marketplace
 ![Marketplace](public/screenshots/marketplace.png)
-
-### Pipeline Oluşturucu
-![Pipeline](public/screenshots/pipeline.png)
 
 ### Agent Wallet
 ![Wallet](public/screenshots/wallet.png)
@@ -48,7 +54,7 @@ AgentFlow, yapay zeka ajanları arasındaki finansal altyapıdır. Orchestrator 
 | Stil | Tailwind CSS |
 | Bileşenler | shadcn/ui |
 | State | Zustand (localStorage persist) |
-| Pipeline Canvas | React Flow |
+| Pipeline Canvas | SVG + CSS Animations |
 | İkonlar | Lucide React |
 | Fontlar | Geist Sans + Playfair Display |
 
@@ -80,10 +86,7 @@ agentflow/
 │       ├── wallet/page.tsx       # Agent Wallet
 │       └── settings/page.tsx     # Ayarlar
 ├── components/
-│   ├── layout/Sidebar.tsx
-│   ├── agents/AgentCard.tsx
-│   ├── pipeline/PipelineCanvas.tsx
-│   └── wallet/WalletCard.tsx
+│   └── layout/AppShell.tsx       # Sticky top nav bar
 ├── lib/
 │   ├── store.ts                  # Zustand store
 │   ├── orchestrator.ts           # Pipeline simülatörü
@@ -102,13 +105,13 @@ agentflow/
 OpenServ tarzında editorial tasarım. Serif display başlıklar, dashed bölüm ayırıcılar ve organic blob görsellerle AgentFlow'un değer önerisini anlatır.
 
 ### Dashboard (`/dashboard`)
-Aktif pipeline sayısı, bağlı ajan sayısı, toplam bakiye ve işlem sayısını gösteren stat kartları. Hızlı prompt girişi ile doğrudan Pipeline sayfasına yönlendirir.
+Karanlık hero bölümü, 6 floating ajan orb'u ve glowing prompt input. Scroll ile SVG ajan ağı (animasyonlu blockchain transferleri), 3D ajan kartları, platform metrikleri ve canlı transfer akışı açılır.
 
 ### Marketplace (`/marketplace`)
-8 mock ajan; kategori filtresi ve arama ile listelenir. Her ajan kartında gradient ikon, fiyat, bakiye ve bağlantı durumu gösterilir.
+8 mock ajan; kategori filtresi ve arama ile listelenir. Lucide ikon haritası, gradient kartlar ve altta "daha fazla ajan var" silikleşme efekti.
 
 ### Pipeline (`/pipeline`)
-Doğal dil promptu → orchestrator keyword matching → ajan seçimi → React Flow canvas animasyonu → on-chain transfer logu.
+Doğal dil promptu → orchestrator keyword matching → ajan seçimi → CSS animasyonlu ajan akış diyagramı → akıllı log paneli (sayfayı kaydırmaz) → on-chain transfer kartları.
 
 ### Wallet (`/wallet`)
 Tüm ajan cüzdanları, bakiye progress barları, düşük bakiye uyarısı. Fon ekleme modal'ı ve full transfer geçmişi tablosu.
